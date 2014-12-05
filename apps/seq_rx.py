@@ -37,6 +37,7 @@ def main():
 	parser.add_option("-L", "--limit", type="int", default=(2**16-1), help="limit [default=%default]")
 	parser.add_option("-i", "--interval", type="int", default=1024, help="update interval [default=%default]")
 	parser.add_option("-l", "--listen", action="store_true", default=False, help="listen on a socket instead of connecting to a server [default=%default]")
+	parser.add_option("-B", "--transport-buffer-size", type="int", default=1, help="request transport buffer size [default=%default]")
 	
 	(options, args) = parser.parse_args()
 	
@@ -103,6 +104,11 @@ def main():
 					
 					s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 					s.connect(destination)
+				
+				if options.transport_buffer_size > 0:
+					print "SO_RCVBUF was", s.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+					s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, options.transport_buffer_size)
+					print "SO_RCVBUF  is", s.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
 				
 				if not hush_open_message:
 					print "Connected"

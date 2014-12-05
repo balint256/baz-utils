@@ -26,11 +26,41 @@
 #   Detect window close (e.g. wx._core.PyDeadObjectError)
 #   Replace horizontal line code with MPL's in-built one
 
-import numpy
-import matplotlib
-import matplotlib.pyplot as pyplot
+import os, xmlrpclib, base64
 
-class realtime_graph():
+import numpy
+
+try:
+    import matplotlib
+    import matplotlib.pyplot as pyplot
+except Exception, e:
+    print "Failed to import matplotlib:", e
+    matplotlib = None
+    pyplot = None
+
+def ndarray_serialiser(self, value, write):
+    write("<value><ndarray>")
+    write(base64.b64encode(value.dumps()))
+    write("</ndarray></value>\n")
+xmlrpclib.Marshaller.dispatch[numpy.ndarray] = ndarray_serialiser
+
+def ndarray_parser(unmarshaller, data):
+    unmarshaller.append(numpy.loads(base64.b64decode(data)))
+    unmarshaller._value = 0
+xmlrpclib.Unmarshaller.dispatch['ndarray'] = ndarray_parser
+
+def float64_serialiser(self, value, write):
+    write("<value><float64>")
+    write(base64.b64encode(value.dumps()))
+    write("</float64></value>\n")
+xmlrpclib.Marshaller.dispatch[numpy.float64] = float64_serialiser
+
+def float64_parser(unmarshaller, data):
+    unmarshaller.append(numpy.loads(base64.b64decode(data)))
+    unmarshaller._value = 0
+xmlrpclib.Unmarshaller.dispatch['float64'] = float64_parser
+
+class _realtime_graph():
     def __init__(self, title="Real-time Graph", sub_title="", x_range=None, show=False, parent=None, manual=False, pos=111, redraw=True, figsize=None, padding=None, y_limits=None, gui_timeout=0.1, data=None, x=None):
         self.parent = parent
         
@@ -120,6 +150,15 @@ class realtime_graph():
         if redraw:
             self._redraw()
     
+    def is_created(self):
+        return (self.figure is not None)
+    
+    def _destroy(self):
+        self.figure = None
+    
+    def _handle_close(self, event):
+        self._destroy()
+    
     def _create_figure(self, data=None, x=None, meta={}, redraw=True, manual=False):
         if self.parent is None:
             pyplot.ion()    # Must be here
@@ -128,6 +167,8 @@ class realtime_graph():
             if self.figsize is not None:
                 kwds['figsize'] = self.figsize
             self.figure = pyplot.figure(**kwds)   # num=X
+            
+            self.figure.canvas.mpl_connect('close_event', self._handle_close)
             
             if self.padding is not None:
                 self.figure.subplots_adjust(**self.padding)
@@ -294,7 +335,8 @@ class realtime_graph():
         if points is not None:
             if clear_existing_points:
                 self.clear_points()
-            self.add_points(points)
+            if len(points) > 0:
+                self.add_points(points)
         if redraw:
             self._redraw()
     
@@ -407,10 +449,126 @@ class realtime_graph():
     
     def close(self):
         pyplot.close(self.figure)
+        self._destroy()
+
+_default_remote_address = ""
+
+class remote_realtime_graph():  #_realtime_graph
+    def __init__(self, title="Real-time Graph", sub_title="", x_range=None, show=False, parent=None, manual=False, pos=111, redraw=True, figsize=None, padding=None, y_limits=None, gui_timeout=0.1, data=None, x=None, address=""):
+        if len(address) == 0:
+            address = _default_remote_address
+        if len(address) == 0:
+            raise Exception("Cannot create remote_realtime_graph without an address")
+        self._proxy = xmlrpclib.ServerProxy(address, allow_none=True)
+        parent_id = None
+        if parent is not None:
+            parent_id = parent._id
+        self._id = self._proxy._create(
+            title,
+            sub_title,
+            x_range,
+            show,
+            parent_id,
+            manual,
+            pos,
+            redraw,
+            figsize,
+            padding,
+            y_limits,
+            gui_timeout,
+            data,
+            x
+        )
+    def __nonzero__(self):
+        return 1
+    # clear
+    # set_y_limits
+    # clear_points
+    # redraw
+    # run_event_loop
+    # go_modal
+    # set_title
+    # set_sub_title
+    # remove_horz_line
+    # remove_vert_line
+    # save
+    # close
+    def _proxy_fn(self, name, *args, **kwds):
+        #print "Proxying %s:" % (name), args, kwds
+        fn = getattr(self._proxy, name)
+        if len(kwds) > 0:
+            for k in kwds.keys():
+                print "Appending to '%s' arg list: %s" % (name, k)
+                args += kwds[k]
+        fn(self._id, *args)
+    def __getattr__(self, name):
+        return lambda *args, **kwds: self._proxy_fn(name, *args, **kwds)
+    def set_data(self, data, x=None, meta={}, auto_x_range=True, x_range=None, autoscale=True, redraw=False):
+        self._proxy.set_data(self._id,
+            data,
+            x,
+            meta,
+            auto_x_range,
+            x_range,
+            autoscale,
+            redraw
+        )
+    def update(self, data=None, title=None, sub_title=None, x=None, meta={}, auto_x_range=True, x_range=None, autoscale=True, points=None, clear_existing_points=True, redraw=True):
+        self._proxy.update(self._id,
+            data,
+            title,
+            sub_title,
+            x,
+            meta,
+            auto_x_range,
+            x_range,
+            autoscale,
+            points,
+            clear_existing_points,
+            redraw
+        )
+    def add_points(self, points, marker='mo', redraw=False):
+        self._proxy.add_points(self._id,
+            points,
+            marker,
+            redraw
+        )
+    def add_horz_line(self, value, color='red', linestyle='-', id=None, replace=True, redraw=False):
+        self._proxy.add_horz_line(self._id,
+            value,
+            color,
+            linestyle,
+            id,
+            replace,
+            redraw
+        )
+    def add_vert_line(self, value, color='black', linestyle='-', id=None, replace=True, redraw=False):
+        self._proxy.add_vert_line(self._id,
+            value,
+            color,
+            linestyle,
+            id,
+            replace,
+            redraw
+        )
+
+RT_GRAPH_KEY = "RT_GRAPH_ADDR"
+if matplotlib and pyplot:
+    realtime_graph = _realtime_graph
+else:
+    print "Only remote_realtime_graph will be available"
+    realtime_graph = remote_realtime_graph
+if os.environ.has_key(RT_GRAPH_KEY) and len(os.environ[RT_GRAPH_KEY]) > 0:
+    #global _default_remote_address, realtime_graph
+    _default_remote_address = os.environ[RT_GRAPH_KEY]
+    print "Default remote real-time graph address:", _default_remote_address
+    realtime_graph = remote_realtime_graph
 
 def main():
-	# FIXME: Plot something simple
-	return 0
+    graph = realtime_graph()
+    graph.update(numpy.linspace(0, 10))
+    graph.go_modal()
+    return 0
 
 if __name__ == '__main__':
-	main()
+    main()
