@@ -111,6 +111,15 @@ class _realtime_graph():
     def _fuse_coords(self, data, x):
         xx = []
         dd = []
+
+        # array([1,2,3,...])
+        # (y, x) -> [(y, x)]
+        # [(y, x)]
+        # [[1,2,3,...],...] -> [[1,2,3,...]], [[0..x0]] / ...
+        # [[1,2,3,...],...], array([0..x]) -> [[1,2,3,...]], array([0..x]) / ..., array([0..x])
+        # [[1,2,3,...],...], [[4,5,6,...],...],
+        # [[1,2,3,...],...], [[4,5,6,...],None,...],
+        # [[1,2,3,...],[1,2,3,...]], [[4,5,6,...]],
         
         if data is not None:
             if not isinstance(data, list):
@@ -265,8 +274,8 @@ class _realtime_graph():
     def set_data(self, data, x=None, meta={}, auto_x_range=True, x_range=None, autoscale=True, redraw=False):  # Added auto_x_range/x_range/autoscale before redraw
         if data is None:
             return
-        elif not isinstance(data, list):
-            data = [data]
+        #elif not isinstance(data, list):   # Done in fuse coords
+        #    data = [data]
         
         #self.figure.canvas.flush_events()
         
@@ -295,10 +304,10 @@ class _realtime_graph():
                 _meta = meta[cnt]
             if cnt >= len(self.plots):
                 #self.plots += self.subplot.plot(x, d)
-                self.plots += self.subplot.plot(xx[cnt], d)
+                self.plots += self.subplot.plot(xx[cnt], d, **_meta)
             else:
                 #self.plots[cnt].set_data(x, d)
-                self.plots[cnt].set_data(xx[cnt], d)
+                self.plots[cnt].set_data(xx[cnt], d, **_meta)
             cnt += 1
         
         if autoscale:
@@ -309,13 +318,13 @@ class _realtime_graph():
             self._apply_axis_limits()
         
         if self.x_range is not None:
-            for line in self._horz_lines:    # FIXME: Use line.get_data()
+            for line in self._horz_lines:
                 line_x, line_y = line.get_data()
                 value = line_y[0]
                 line.set_data(numpy.array([self.x_range[0], self.x_range[1]]), numpy.array([value, value]))
         
         if self.y_limits is not None:
-            for line in self._vert_lines:    # FIXME: Use line.get_data()
+            for line in self._vert_lines:
                 line_x, line_y = line.get_data()
                 value = line_x[0]
                 line.set_data(numpy.array([value, value]), numpy.array([self.y_limits[0], self.y_limits[1]]))
