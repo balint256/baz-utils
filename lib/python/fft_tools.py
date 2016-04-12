@@ -22,29 +22,34 @@
 #  
 #  
 
+import sys, math
+
 import numpy
-import math
 
-import sys
+# Assumes normalised input values [-1,1]
+def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming, pad=True, adjust=True, verbose=False, ref_scale=2.0):  # FIXME: step (when it was floating point, for more flexible overlap)
+    if len(samps) == 0:
+        return (0, numpy.array([]), numpy.array([]), numpy.array([]))
 
-def mirror_fft(data):
-    pos_len = (len(data) + 1) / 2
-    pos = data[:pos_len]
-    neg = data[len(data) - pos_len:]
-    return numpy.concatenate((neg, pos))
+    step = max(1, int(step))    # Stride (of 'num_bins') used in processing loop below
 
-# Assumes input values [0,1]
-def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming, pad=True, adjust=True, verbose=False):  # FIXME: step (when it was floating point, for more flexible overlap)
     if num_bins is None:
         num_bins = len(samps)
-    num_ffts = len(samps)/num_bins
-    point_count = num_ffts * num_bins
-    if verbose: print "Processing %d FFTs" % (num_ffts / step)
-    left_over = len(samps) - point_count
-    if point_count != len(samps):
-        if not pad:
+
+    num_ffts = len(samps)/num_bins  # If less 'samps' than 'num_bins', will zero pad
+
+    left_over = len(samps) - (num_ffts * num_bins)
+    if left_over > 0:
+        if pad:
+            if verbose: print "Padding %d tail samples for FFT" % (num_bins - left_over)
+            num_ffts += 1
+        else:
             if verbose: print "Skipping %d tail samples for FFT" % (left_over)
-    
+
+    num_ffts = max(1, num_ffts) # Might still be 0 if not padding
+    total_transforms = 1 + ((num_ffts-1) / step)
+    if verbose: print "Processing %d FFTs" % (total_transforms)
+
     fft_sum = numpy.zeros(num_bins)
     fft_max = numpy.zeros(num_bins)
     fft_min = numpy.ones(num_bins)
@@ -54,23 +59,29 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
     else:
         window_points = window(num_bins)
     
-    if pad:
-        pad_amount = num_bins - left_over
-        if isinstance(samps, list):
-            samps += [0]*pad_amount
-        elif isinstance(samps, numpy.ndarray):
-            samps = numpy.concatenate((samps, numpy.zeros(pad_amount)))
-        else:
-            raise Exception("Cannot pad unknown type '%s': %s" % (type(samps), str(samps)))
+    # if pad:
+    #     pad_amount = num_bins - left_over
+    #     if isinstance(samps, list):
+    #         samps += [0]*pad_amount
+    #     elif isinstance(samps, numpy.ndarray):
+    #         samps = numpy.concatenate((samps, numpy.zeros(pad_amount)))
+    #     else:
+    #         raise Exception("Cannot pad unknown type '%s': %s" % (type(samps), str(samps)))
     
     cnt = 0
     for i in range(0, num_ffts, step):
-        cnt += 1
-        data = numpy.array(samps[i*num_bins:i*num_bins + num_bins])
+        start_idx = i * num_bins
+        end_idx = min(len(samps), start_idx + num_bins)
+        data = numpy.array(samps[start_idx:end_idx])
+
         if window_points is not None:
-            data *= window_points
-        fft = numpy.fft.fft(data)
-        fft = mirror_fft(fft)
+            if len(data) == num_bins:
+                data *= window_points
+            else:
+                data *= window(len(data))   # Shorter window
+
+        fft = numpy.fft.fft(data, num_bins) # Will zero pad if 'len(data)'' < 'num_bins'
+        fft = numpy.fft.fftshift(fft)
         fft = numpy.abs(fft)
         
         fft = (fft * fft)
@@ -78,31 +89,35 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
         fft_min = numpy.minimum(fft, fft_min)
         fft_max = numpy.maximum(fft, fft_max)
         
-        #sys.stdout.write("%d " % (i))
-        #sys.stdout.flush()
+        if verbose: 
+            print "%d:%d " % (cnt, i),
+            sys.stdout.flush()
+
+        cnt += 1
     
-    #print
+    #if verbose: print
     
-    fft_avg = fft_sum / float(cnt)
+    if cnt > 0:
+        fft_avg = fft_sum / float(cnt)
     
     if log_scale:
         if verbose:
-            sys.stdout.write("Running logarithm...")
+            print "Running logarithm...",
             sys.stdout.flush()
+
         adjust_amount = 0.0
         if adjust:
-            ref_scale = 2
-            adjust_amount =(-20.0 * math.log10(num_bins)                # Adjust for number of bins
-                            -20.0 * math.log10(ref_scale/2))            # Adjust for reference scale
+            adjust_amount =(-20.0 * math.log10(num_bins)     # Adjust for number of bins
+                            -20.0 * math.log10(ref_scale/2)) # Adjust for reference scale
+
             if window_points is not None:
                 window_power = sum(map(lambda x: x*x, window_points))
-                adjust_amount += (-10.0 * math.log10(window_power/num_bins))   # Adjust for windowing loss
+                adjust_amount += (-10.0 * math.log10(window_power/num_bins)) # Adjust for windowing loss
         
         fft_avg = (10.0 * numpy.log10(fft_avg)) + adjust_amount
         fft_max = (10.0 * numpy.log10(fft_max)) + adjust_amount
         fft_min = (10.0 * numpy.log10(fft_min)) + adjust_amount
         
-        if verbose:
-            print "done."
+        if verbose: print "done."
     
     return (cnt, fft_avg, fft_min, fft_max)
