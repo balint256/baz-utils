@@ -153,7 +153,7 @@ class ThreadedTCPRequestHandler(SocketServer.StreamRequestHandler): # BaseReques
         except socket.error, (e, msg):
             if e != 32: # Broken pipe
                 print "==>", self.client_address, "-", msg
-    def send(self, msg, try_same_thread=True):  # FIXME: log instead of print
+    def send(self, msg, try_same_thread=True, raise_exception=False):  # FIXME: log instead of print
         if self.send_thread is None:
             self.request.send(msg)
             return True
@@ -179,8 +179,12 @@ class ThreadedTCPRequestHandler(SocketServer.StreamRequestHandler): # BaseReques
             except socket.error, (e, msg):
                 if e != 32: # Broken pipe (silently ignore)
                     print "Socket error when sending to %s: %s" % (self.client_address, (e, msg))
+                if raise_exception:
+                    raise
             except Exception, e:
                 print "Unhandled exception in send for %s: %s" % (self.client_address, e)
+                if raise_exception:
+                    raise
             return False
 
 class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
@@ -197,17 +201,17 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
         self.clients = []
         self.connect_event = threading.Event()
         self.keep_connecting = True
+        self.allow_reuse_address = True
     def start(self, retry=False, wait=5, log=None):
         if self.server_thread:
             return
         while self.keep_connecting:
             try:
                 SocketServer.TCPServer.__init__(self, self.address, self.request_handler)
-                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 #ip, port = self.server_address
                 break
             except socket.error, (e, msg):
-                if retry and e == 98:
+                if retry and ((e == 98) or (e == 48)): # Address already in use   (both)
                     if log: log(e, msg)
                     time.sleep(wait)
                     continue
