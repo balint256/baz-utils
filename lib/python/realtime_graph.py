@@ -61,11 +61,13 @@ def float64_parser(unmarshaller, data):
 xmlrpclib.Unmarshaller.dispatch['float64'] = float64_parser
 
 class _realtime_graph():
-    def __init__(self, title="Real-time Graph", sub_title="", x_range=None, show=False, parent=None, manual=False, pos=111, redraw=True, figsize=None, padding=None, y_limits=None, gui_timeout=0.1, data=None, x=None):
+    def __init__(self, title="Real-time Graph", sub_title="", x_range=None, show=False, parent=None, manual=False, pos=111, redraw=True, figsize=None, padding=None, y_limits=None, gui_timeout=0.1, data=None, x=None, verbose=False):
+        self.verbose = verbose
         self.parent = parent
         
         if isinstance(x_range, float) or isinstance(x_range, int):
             x_range = (0, x_range-1)
+            self._log("Creating x_range: {}", x_range)
         
         self.title_text = title
         self.sub_title_text = sub_title
@@ -92,10 +94,20 @@ class _realtime_graph():
         self._vert_lines_map = {}
         
         if show:
+            self._log("Showing from constructor")
             self._create_figure(data=data, x=x, manual=manual, redraw=redraw)
+
+    def _log(self, msg, *args, **kwds):
+        if self.verbose:
+            if isinstance(msg, str):
+                formatted_msg = msg.format(*args, **kwds)
+            else:
+                formatted_msg = str(msg)
+            print "realtime_graph: {}".format(formatted_msg)
     
     def _calc_agg_x_range(self, xx):
         if len(xx) == 0:
+            self._log("No X data so no X range")
             return None
         
         agg_x_range = [None, None]
@@ -105,6 +117,8 @@ class _realtime_graph():
                 agg_x_range[0] = _x_range[0]
             if agg_x_range[1] is None or _x_range[1] < agg_x_range[1]:
                 agg_x_range[1] = _x_range[1]
+
+        self._log("Calculated X range: {}", agg_x_range)
         
         return agg_x_range
     
@@ -123,36 +137,48 @@ class _realtime_graph():
         
         if data is not None:
             if not isinstance(data, list):
+                self._log("Data is not list, making list")
                 data = [data]
             
+            self._log("Fusing coords for {} series", len(data))
+
+            idx = 1
             for d in data:
                 if isinstance(d, tuple):
+                    self._log("Series {} is tuple", idx)
                     dd += [d[0]]
                     xx += [d[1]]
                 else:
+                    self._log("Series {} is: {} ({}-{}, {} items)", idx, type(d), min(d), max(d), len(d))
                     dd += [d]
                     manual_x = False
                     if x is not None:
                         if isinstance(x, list):
                             if len(dd) <= len(x):
                                 _x = x[len(dd)-1]
-                                if _x:
+                                if _x is not None:
+                                    self._log("Using supplied multi X series for series {}: {}-{} ({} items)", idx, min(_x), max(_x), len(_x))
                                     xx += [_x]
                                 else:
                                     manual_x = True
                             else:
                                 manual_x = True
                         else:
+                            self._log("Using supplied single X series for series {}", idx)
                             xx += [x]
                     else:
                         manual_x = True
                     
                     if manual_x:
+                        self._log("Manual X for series {} length {}", idx, len(d))
                         xx += [numpy.linspace(0, len(d) - 1, len(d))]
-        
+
+                idx += 1
+
         return xx, dd
     
     def clear(self, redraw=True):
+        self._log("Clearing graph")
         for plot in self.plots:
             self.subplot.lines.remove(plot)
         self.plots = []
@@ -166,26 +192,31 @@ class _realtime_graph():
         self.figure = None
     
     def _handle_close(self, event):
+        self._log("Closing")
         self._destroy()
     
     def _create_figure(self, data=None, x=None, meta={}, redraw=True, manual=False):
         if self.parent is None:
+            self._log("Enabling interactive mode")
             pyplot.ion()    # Must be here
             
             kwds = {}
             if self.figsize is not None:
                 kwds['figsize'] = self.figsize
+            self._log("Creating figure with: {}", kwds)
             self.figure = pyplot.figure(**kwds)   # num=X
             
             self.figure.canvas.mpl_connect('close_event', self._handle_close)
             
             if self.padding is not None:
+                self._log("Applying padding: {}", self.padding)
                 self.figure.subplots_adjust(**self.padding)
             
             self.title = self.figure.suptitle(self.title_text)
             if manual == False:
                 self.subplot = self.figure.add_subplot(self.pos)
         else:
+            self._log("Adding subplot to parent")
             self.subplot = self.parent.figure.add_subplot(self.pos)
         
         if self.subplot is not None:
@@ -226,6 +257,7 @@ class _realtime_graph():
             for d in dd:
                 if isinstance(meta, list):
                     _meta = meta[cnt]
+                self._log("Adding series {} of type {} with meta {}", (cnt+1), type(d), _meta)
                 self.plots += self.subplot.plot(xx[cnt], d, **_meta)
                 cnt += 1
             
@@ -242,9 +274,11 @@ class _realtime_graph():
     
     def _apply_axis_limits(self):
         if self.x_range is not None:
+            self._log("Applying xlim: {}", self.x_range)
             #self.plot.axes.set_xlim(self.x_range)
             self.subplot.set_xlim(self.x_range)
         if self.y_limits is not None:
+            self._log("Applying ylim: {}", self.y_limits)
             #self.plot.axes.set_ylim(self.y_limits)
             self.subplot.set_ylim(self.y_limits)
     
@@ -262,24 +296,38 @@ class _realtime_graph():
                 data = data[0]
             
             x_range = (0, len(data) - 1)
+
+        self._log("Calculated X range: {}", x_range)
         
         if store:
+            self._log("Storing calculated X range: {}", x_range)
             self.x_range = x_range
         
         return x_range
     
     def set_y_limits(self, y_limits):
+        self._log("Y limits set to: {}", y_limits)
         self.y_limits = y_limits
     
     def set_data(self, data, x=None, meta={}, auto_x_range=True, x_range=None, autoscale=True, redraw=False):  # Added auto_x_range/x_range/autoscale before redraw
         if data is None:
+            self._log("No data to set")
             return
+        if self.subplot is None:
+            if redraw:
+                self._log("While setting data: creating non-existent subplot")
+                #self._create_figure(data=data, x=x, meta=meta, redraw=redraw)
+                self._create_figure()
+            else:
+                self._log("While setting data: no subplot but not redrawing")
+                return
         #elif not isinstance(data, list):   # Done in fuse coords
         #    data = [data]
         
         #self.figure.canvas.flush_events()
         
         if x_range is not None:
+            self._log("Using custom X range: {}", x_range)
             self.x_range = x_range
         
         xx, dd = self._fuse_coords(data, x)
@@ -287,8 +335,10 @@ class _realtime_graph():
         #if self.x_range is None:
         #    self._calc_x_range(data)
         if (self.x_range is None or auto_x_range) and len(xx) > 0:
+            self._log("Forcing calculation of X range (auto X range: {})", auto_x_range)
             self.x_range = self._calc_agg_x_range(xx)
             #print "Calculated agg X range:", self.x_range
+            self._log("Applying newly calculated xlim: {}", self.x_range)
             self.subplot.set_xlim(self.x_range)
         
         #if x is None:
@@ -333,6 +383,7 @@ class _realtime_graph():
             self._redraw()
     
     def update(self, data=None, title=None, sub_title=None, x=None, meta={}, auto_x_range=True, x_range=None, autoscale=True, points=None, clear_existing_points=True, redraw=True):
+        self._log("Updating")
         if title is not None:
             self.set_title(title)
         if sub_title is not None:
@@ -350,6 +401,7 @@ class _realtime_graph():
             self._redraw()
     
     def clear_points(self, redraw=False):
+        self._log("Clearing points")
         for line in self.points:
             self.subplot.lines.remove(line)
         self.points = []
@@ -358,25 +410,32 @@ class _realtime_graph():
     
     def add_points(self, points, marker='mo', redraw=False):
         if len(points) == 0:
+            self._log("No points to add")
             return
+        self._log("Adding {} points", len(points))
         self.points += self.subplot.plot(numpy.array(map(lambda x: x[0], points)), numpy.array(map(lambda x: x[1], points)), marker)    # FIXME: Better way to do this?
         if redraw:
             self._redraw()
     
     def redraw(self):
+        self._log("External redraw called")
         self._redraw()
     
     def _redraw(self, quick=False):
         if self.parent is None:
             try:
                 if self.figure is None:
+                    self._log("During redraw creating figure")
                     self._create_figure(redraw=False)
+                self._log("Drawing and flushing events")
                 self.figure.canvas.draw()
                 self.figure.canvas.flush_events()
                 if quick == False:
+                    self._log("Running event loop once with timeout {}", self._gui_timeout)
                     self.figure.canvas.start_event_loop(timeout=self._gui_timeout)
                 self.figure.canvas.flush_events()
-            except RuntimeError:
+            except RuntimeError, e:
+                self._log("During redraw RuntimeError, re-creating figure: {}", e)
                 self._create_figure()
         else:
             self.parent._redraw(quick=quick)
@@ -384,14 +443,18 @@ class _realtime_graph():
     def run_event_loop(self, timeout=None):
         if timeout is None:
             timeout = self._gui_timeout
+        #self._log("Running event loop with timeout {}", timeout)   # Would produce too much output
         self.figure.canvas.start_event_loop(timeout=timeout)
     
     def go_modal(self):
         if self.figure is None:
+            self._log("Cannot go modal without figure")
             return False
+        self._log("Going modal")
         return self.figure.canvas.start_event_loop()
     
     def set_title(self, title, redraw=False):
+        self._log("Setting title to: {}", title)
         self.title_text = title
         if self.title is not None:
             self.title.set_text(title)
@@ -399,6 +462,7 @@ class _realtime_graph():
                 self._redraw()
     
     def set_sub_title(self, sub_title, redraw=False):
+        self._log("Setting subtitle to: {}", sub_title)
         self.sub_title_text = sub_title
         if self.subplot is not None:
             self.subplot.set_title(sub_title)
@@ -421,7 +485,9 @@ class _realtime_graph():
     
     def remove_horz_line(self, id):
         if not id in self._horz_lines_map.keys():
+            self._log("horizontal line {} does not exist", id)
             return
+        self._log("Removing horizontal line {}", id)
         line = self._horz_lines_map[id]
         self._horz_lines.remove(line)
         self.subplot.lines.remove(line)
@@ -444,7 +510,9 @@ class _realtime_graph():
     
     def remove_vert_line(self, id):
         if not id in self._vert_lines_map.keys():
+            self._log("Vertical line {} does not exist", id)
             return
+        self._log("Removing vertical line {}", id)
         line = self._vert_lines_map[id]
         self._vert_lines.remove(line)
         self.subplot.lines.remove(line)
@@ -453,10 +521,12 @@ class _realtime_graph():
     def save(self, output_name):
         if self.parent is not None:
             return self.parent.save(output_name)
+        self._log("Saving to {}", output_name)
         self.figure.savefig(output_name)
         return True
     
     def close(self):
+        self._log("Closing")
         pyplot.close(self.figure)
         self._destroy()
 
