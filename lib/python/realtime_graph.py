@@ -84,6 +84,8 @@ class _realtime_graph():
         self.plots = []
         self.subplot = None # Axes
         self.points = []
+
+        self.children = []
         
         self._gui_timeout = gui_timeout
         
@@ -96,6 +98,13 @@ class _realtime_graph():
         if show:
             self._log("Showing from constructor")
             self._create_figure(data=data, x=x, manual=manual, redraw=redraw)
+
+        if parent is not None:
+            parent._register_child(self)
+
+    def _register_child(self, child):
+        if child not in self.children:
+            self.children.append(child)
 
     def _log(self, msg, *args, **kwds):
         if self.verbose:
@@ -188,8 +197,16 @@ class _realtime_graph():
     def is_created(self):
         return (self.figure is not None)
     
-    def _destroy(self):
+    def _destroy(self, children=True):
+        self.points = []
+        self.plots = []
+        self.subplot = None
+        self.title = None
         self.figure = None
+
+        if children and len(self.children) > 0:
+            for child in self.children:
+                child._destroy()
     
     def _handle_close(self, event):
         self._log("Closing")
@@ -216,6 +233,9 @@ class _realtime_graph():
             if manual == False:
                 self.subplot = self.figure.add_subplot(self.pos)
         else:
+            if self.parent.figure is None:
+                self._log("Re-creating parent figure as it no longer exists")
+                self.parent._create_figure(redraw=False)
             self._log("Adding subplot to parent")
             self.subplot = self.parent.figure.add_subplot(self.pos)
         
@@ -383,6 +403,9 @@ class _realtime_graph():
             self._redraw()
     
     def update(self, data=None, title=None, sub_title=None, x=None, meta={}, auto_x_range=True, x_range=None, autoscale=True, points=None, clear_existing_points=True, redraw=True):
+        if self.figure is None:
+            self._log("During update creating figure")
+            self._create_figure(redraw=False)
         self._log("Updating")
         if title is not None:
             self.set_title(title)
@@ -433,7 +456,8 @@ class _realtime_graph():
                 if quick == False:
                     self._log("Running event loop once with timeout {}", self._gui_timeout)
                     self.figure.canvas.start_event_loop(timeout=self._gui_timeout)
-                self.figure.canvas.flush_events()
+                if self.figure is not None: # Might be set to None after event loop (via '_destroy')
+                    self.figure.canvas.flush_events()
             except RuntimeError, e:
                 self._log("During redraw RuntimeError, re-creating figure: {}", e)
                 self._create_figure()
@@ -521,6 +545,8 @@ class _realtime_graph():
     def save(self, output_name):
         if self.parent is not None:
             return self.parent.save(output_name)
+        if self.figure is None:
+            return False
         self._log("Saving to {}", output_name)
         self.figure.savefig(output_name)
         return True
