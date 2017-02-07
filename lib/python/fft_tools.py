@@ -52,7 +52,8 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
 
     fft_sum = numpy.zeros(num_bins)
     fft_max = numpy.zeros(num_bins)
-    fft_min = numpy.ones(num_bins)
+    # fft_min = numpy.ones(num_bins)
+    fft_min = None
     if window is None:
         #window_points = numpy.ones(num_bins)
         window_points = None
@@ -86,7 +87,10 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
         
         fft = (fft * fft)
         fft_sum += fft
-        fft_min = numpy.minimum(fft, fft_min)
+        if fft_min is None:
+            fft_min = fft
+        else:
+            fft_min = numpy.minimum(fft, fft_min)
         fft_max = numpy.maximum(fft, fft_max)
         
         if verbose: 
