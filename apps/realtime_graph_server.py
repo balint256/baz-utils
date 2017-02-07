@@ -22,7 +22,7 @@
 #  
 #  
 
-import traceback, threading
+import traceback, threading, sys
 from optparse import OptionParser
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
@@ -88,10 +88,11 @@ class GraphServer():
 			self._graphs[self._last_id] = g
 			print "Created graph #%d:" % (self._last_id), params
 			if g.is_created():
-				#print "Created on creation"
+				print "Created on creation"
 				#self._last_created_graph = g
 				with self._lock:
 					self._created_graphs += [g]
+					print "%d created graphs" % (len(self._created_graphs))
 					self._created_event.set()
 			return self._last_id
 		
@@ -216,15 +217,37 @@ def main():
 					if have_graph:
 						print "Waiting..."
 						have_graph = False
-					instance._dispatch_event.wait()
-					instance._dispatch_event.clear()
+
+						instance._dispatch_event.wait()
+						instance._dispatch_event.clear()
+					else:
+						print "[Waiting...]"
+						try:
+							while not instance._created_event.wait(options.timeout):
+								pass
+						except KeyboardInterrupt:
+							break
+						instance._created_event.clear()
+					print "[Cleared]"
 			else:
 				have_graph = True
+				#print "Running event loop..."
+				#sys.stdout.write('.')
+				#sys.stdout.flush()
+				#instance.get_created_graph()._redraw(quick=True)
 				instance.get_created_graph().run_event_loop(options.timeout)
 			
 			cmds = instance.get_commands()
-			for cmd in cmds:
-				instance.dispatch(cmd[0], cmd[1])
+			if len(cmds) > 0:
+				#print "Got %d commands" % (len(cmds))
+				sys.stdout.write('.')
+				sys.stdout.flush()
+
+				for cmd in cmds:
+					instance.dispatch(cmd[0], cmd[1])
+
+				#instance.get_created_graph()._redraw(quick=True)
+				#instance.get_created_graph().run_event_loop(options.timeout)
 			
 			instance._processed_event.set()
 	
