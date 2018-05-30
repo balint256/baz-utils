@@ -225,6 +225,9 @@ class _realtime_graph():
     def _handle_close(self, event):
         self._log("Handling close event")
         self._destroy()
+
+    def get_figure(self):
+        return self.figure
     
     def _create_figure(self, data=None, x=None, meta={}, redraw=True, manual=False):
         if isinstance(self.pos, int):
@@ -505,7 +508,7 @@ class _realtime_graph():
             self._log("Cannot go modal without figure")
             return False
         self._log("Going modal")
-        return self.figure.canvas.start_event_loop()
+        return self.figure.canvas.start_event_loop(timeout=0)
     
     def set_title(self, title, redraw=False):
         self._log("Setting title to: {}", title)
@@ -547,14 +550,14 @@ class _realtime_graph():
         self.subplot.lines.remove(line)
         del self._horz_lines_map[id]
     
-    def add_vert_line(self, value, color='black', linestyle='-', id=None, replace=True, redraw=False):
+    def add_vert_line(self, value, color='black', linestyle='-', id=None, replace=True, redraw=False, width=1.0):
         if id in self._vert_lines_map.keys():
             if not replace:
                 return
             self.remove_vert_line(id)
         if self.y_limits is None:
             return
-        line = matplotlib.lines.Line2D(numpy.array([value, value]), numpy.array([self.y_limits[0], self.y_limits[1]]), linestyle=linestyle, color=color)
+        line = matplotlib.lines.Line2D(numpy.array([value, value]), numpy.array([self.y_limits[0], self.y_limits[1]]), linestyle=linestyle, color=color, linewidth=width)
         self._vert_lines += [line]
         if id is not None:
             self._vert_lines_map[id] = line
