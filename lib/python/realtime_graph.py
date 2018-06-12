@@ -26,15 +26,19 @@
 #   Detect window close (e.g. wx._core.PyDeadObjectError)
 #   Replace horizontal line code with MPL's in-built one
 
-import os, xmlrpclib, base64
+import os, base64
+try:
+    from xmlrpc import client as xmlrpclib
+except:
+    import xmlrpclib
 
 import numpy
 
 try:
     import matplotlib
     import matplotlib.pyplot as pyplot
-except Exception, e:
-    print "Failed to import matplotlib:", e
+except Exception as e:
+    print("Failed to import matplotlib:", e)
     matplotlib = None
     pyplot = None
 
@@ -112,7 +116,7 @@ class _realtime_graph():
                 formatted_msg = msg.format(*args, **kwds)
             else:
                 formatted_msg = str(msg)
-            print "realtime_graph: {}".format(formatted_msg)
+            print("realtime_graph: {}".format(formatted_msg))
     
     def _calc_agg_x_range(self, xx):
         if len(xx) == 0:
@@ -483,7 +487,7 @@ class _realtime_graph():
                 # if self.figure is not None: # Might be set to None after event loop (via '_destroy')
                 if self.is_created():
                     self.figure.canvas.flush_events()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 self._log("During redraw RuntimeError, re-creating figure: {}", e)
                 self._create_figure()
         else:
@@ -636,7 +640,7 @@ class remote_realtime_graph():  #_realtime_graph
         fn = getattr(self._proxy, name)
         if len(kwds) > 0:
             for k in kwds.keys():
-                print "Appending to '%s' arg list: %s" % (name, k)
+                print("Appending to '%s' arg list: %s" % (name, k))
                 args += kwds[k]
         fn(self._id, *args)
     def __getattr__(self, name):
@@ -695,12 +699,12 @@ RT_GRAPH_KEY = "RT_GRAPH_ADDR"
 if matplotlib and pyplot:
     realtime_graph = _realtime_graph
 else:
-    print "Only remote_realtime_graph will be available"
+    print("Only remote_realtime_graph will be available")
     realtime_graph = remote_realtime_graph
-if os.environ.has_key(RT_GRAPH_KEY) and len(os.environ[RT_GRAPH_KEY]) > 0:
+if RT_GRAPH_KEY in os.environ and len(os.environ[RT_GRAPH_KEY]) > 0:
     #global _default_remote_address, realtime_graph
     _default_remote_address = os.environ[RT_GRAPH_KEY]
-    print "Default remote real-time graph address:", _default_remote_address
+    print("Default remote real-time graph address:", _default_remote_address)
     realtime_graph = remote_realtime_graph
 
 def main():

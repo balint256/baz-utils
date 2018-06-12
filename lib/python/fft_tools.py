@@ -41,14 +41,14 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
     left_over = len(samps) - (num_ffts * num_bins)
     if left_over > 0:
         if pad:
-            if verbose: print "Padding %d tail samples for FFT" % (num_bins - left_over)
+            if verbose: print("Padding %d tail samples for FFT" % (num_bins - left_over))
             num_ffts += 1
         else:
-            if verbose: print "Skipping %d tail samples for FFT" % (left_over)
+            if verbose: print("Skipping %d tail samples for FFT" % (left_over))
 
     num_ffts = max(1, num_ffts) # Might still be 0 if not padding
     total_transforms = 1 + ((num_ffts-1) / step)
-    if verbose: print "Processing %d FFTs" % (total_transforms)
+    if verbose: print("Processing %d FFTs" % (total_transforms))
 
     fft_sum = numpy.zeros(num_bins)
     fft_max = numpy.zeros(num_bins)
@@ -94,7 +94,7 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
         fft_max = numpy.maximum(fft, fft_max)
         
         if verbose: 
-            print "%d:%d " % (cnt, i),
+            print("%d:%d " % (cnt, i),)
             sys.stdout.flush()
 
         cnt += 1
@@ -106,7 +106,7 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
     
     if log_scale:
         if verbose:
-            print "Running logarithm...",
+            print("Running logarithm...",)
             sys.stdout.flush()
 
         adjust_amount = 0.0
@@ -122,6 +122,6 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
         fft_max = (10.0 * numpy.log10(fft_max)) + adjust_amount
         fft_min = (10.0 * numpy.log10(fft_min)) + adjust_amount
         
-        if verbose: print "done."
+        if verbose: print("done.")
     
     return (cnt, fft_avg, fft_min, fft_max)
