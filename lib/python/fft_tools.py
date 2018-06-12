@@ -27,7 +27,7 @@ import sys, math
 import numpy
 
 # Assumes normalised input values [-1,1]
-def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming, pad=True, adjust=True, verbose=False, ref_scale=2.0):  # FIXME: step (when it was floating point, for more flexible overlap)
+def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming, pad=True, adjust=True, verbose=False, ref_scale=2.0):#, real=False):  # FIXME: step (when it was floating point, for more flexible overlap)
     if len(samps) == 0:
         return (0, numpy.array([]), numpy.array([]), numpy.array([]))
 
@@ -80,7 +80,7 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
             else:
                 data *= window(len(data))   # Shorter window
 
-        fft = numpy.fft.fft(data, num_bins) # Will zero pad if 'len(data)'' < 'num_bins'
+        fft = numpy.fft.fft(data, num_bins) # Will zero pad if 'len(data)' < 'num_bins'
         fft = numpy.fft.fftshift(fft)
         fft = numpy.abs(fft)
         
@@ -89,9 +89,9 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
         fft_min = numpy.minimum(fft, fft_min)
         fft_max = numpy.maximum(fft, fft_max)
         
-        if verbose: 
-            print "%d:%d " % (cnt, i),
-            sys.stdout.flush()
+        # if verbose:
+        #     print "%d:%d " % (cnt, i),
+        #     sys.stdout.flush()
 
         cnt += 1
     
@@ -114,6 +114,7 @@ def calc_fft(samps, num_bins=None, log_scale=True, step=1, window=numpy.hamming,
                 window_power = sum(map(lambda x: x*x, window_points))
                 adjust_amount += (-10.0 * math.log10(window_power/num_bins)) # Adjust for windowing loss
         
+        # FIXME  We need to add 3dB to all bins but the DC bin
         fft_avg = (10.0 * numpy.log10(fft_avg)) + adjust_amount
         fft_max = (10.0 * numpy.log10(fft_max)) + adjust_amount
         fft_min = (10.0 * numpy.log10(fft_min)) + adjust_amount
