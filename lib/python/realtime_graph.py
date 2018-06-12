@@ -128,7 +128,7 @@ class _realtime_graph():
             _x_range = (min(_x), max(_x))
             if agg_x_range[0] is None or _x_range[0] < agg_x_range[0]:
                 agg_x_range[0] = _x_range[0]
-            if agg_x_range[1] is None or _x_range[1] < agg_x_range[1]:
+            if agg_x_range[1] is None or _x_range[1] > agg_x_range[1]:
                 agg_x_range[1] = _x_range[1]
 
         self._log("Calculated X range: {}", agg_x_range)
@@ -507,12 +507,12 @@ class _realtime_graph():
             return False
         return True
     
-    def go_modal(self):
+    def go_modal(self, timeout=0):
         if self.figure is None:
             self._log("Cannot go modal without figure")
             return False
         self._log("Going modal")
-        return self.figure.canvas.start_event_loop(timeout=0)
+        return self.figure.canvas.start_event_loop(timeout=timeout)
     
     def set_title(self, title, redraw=False):
         self._log("Setting title to: {}", title)
