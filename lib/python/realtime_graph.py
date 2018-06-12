@@ -186,11 +186,16 @@ class _realtime_graph():
 
         return xx, dd
     
-    def clear(self, redraw=True):
+    def clear(self, redraw=True, children=True):
         self._log("Clearing graph")
         for plot in self.plots:
             self.subplot.lines.remove(plot)
         self.plots = []
+
+        if children and len(self.children) > 0:
+            for child in self.children:
+                child.clear(redraw=False)
+
         if redraw:
             self._redraw()
     
@@ -206,6 +211,7 @@ class _realtime_graph():
         return False
     
     def _destroy(self, children=True):
+        self._log("Destroying")
         self.points = []
         self.plots = []
         self.subplot = None
@@ -217,10 +223,18 @@ class _realtime_graph():
                 child._destroy()
     
     def _handle_close(self, event):
-        self._log("Closing")
+        self._log("Handling close event")
         self._destroy()
+
+    def get_figure(self):
+        return self.figure
     
     def _create_figure(self, data=None, x=None, meta={}, redraw=True, manual=False):
+        if isinstance(self.pos, int):
+            pos = (self.pos,)
+        else:
+            pos = self.pos
+
         if self.parent is None:
             self._log("Enabling interactive mode")
             pyplot.ion()    # Must be here
@@ -239,13 +253,13 @@ class _realtime_graph():
             
             self.title = self.figure.suptitle(self.title_text)
             if manual == False:
-                self.subplot = self.figure.add_subplot(self.pos)
+                self.subplot = self.figure.add_subplot(*pos)
         else:
             if self.parent.figure is None:
                 self._log("Re-creating parent figure as it no longer exists")
                 self.parent._create_figure(redraw=False)
             self._log("Adding subplot to parent")
-            self.subplot = self.parent.figure.add_subplot(self.pos)
+            self.subplot = self.parent.figure.add_subplot(*pos)
         
         if self.subplot is not None:
             self.subplot.grid(True)
@@ -385,7 +399,7 @@ class _realtime_graph():
                 self.plots += self.subplot.plot(xx[cnt], d, **_meta)
             else:
                 #self.plots[cnt].set_data(x, d)
-                self.plots[cnt].set_data(xx[cnt], d, **_meta)
+                self.plots[cnt].set_data(xx[cnt], d)
             cnt += 1
         
         if autoscale:
@@ -439,12 +453,14 @@ class _realtime_graph():
         if redraw:
             self._redraw()
     
-    def add_points(self, points, marker='mo', redraw=False):
+    def add_points(self, points, marker='mo', alpha=1.0, redraw=False):
         if len(points) == 0:
             self._log("No points to add")
             return
         self._log("Adding {} points", len(points))
-        self.points += self.subplot.plot(numpy.array(map(lambda x: x[0], points)), numpy.array(map(lambda x: x[1], points)), marker)    # FIXME: Better way to do this?
+        # self.points += self.subplot.plot(numpy.array(map(lambda x: x[0], points)), numpy.array(map(lambda x: x[1], points)), marker, alpha=alpha)    # FIXME: Better way to do this?
+        coords = zip(*points)
+        self.points += self.subplot.plot(coords[0], coords[1], marker, alpha=alpha)
         if redraw:
             self._redraw()
     
@@ -464,7 +480,8 @@ class _realtime_graph():
                 if quick == False:
                     self._log("Running event loop once with timeout {}", self._gui_timeout)
                     self.figure.canvas.start_event_loop(timeout=self._gui_timeout)
-                if self.figure is not None: # Might be set to None after event loop (via '_destroy')
+                # if self.figure is not None: # Might be set to None after event loop (via '_destroy')
+                if self.is_created():
                     self.figure.canvas.flush_events()
             except RuntimeError, e:
                 self._log("During redraw RuntimeError, re-creating figure: {}", e)
@@ -472,11 +489,19 @@ class _realtime_graph():
         else:
             self.parent._redraw(quick=quick)
     
-    def run_event_loop(self, timeout=None):
-        if timeout is None:
-            timeout = self._gui_timeout
-        #self._log("Running event loop with timeout {}", timeout)   # Would produce too much output
-        self.figure.canvas.start_event_loop(timeout=timeout)
+    def run_event_loop(self, timeout=None, flush_only=False):
+        if not self.is_created():
+            return False
+        if flush_only:
+            self.figure.canvas.flush_events()
+        else:
+            if timeout is None:
+                timeout = self._gui_timeout
+            #self._log("Running event loop with timeout {}", timeout)   # Would produce too much output
+            self.figure.canvas.start_event_loop(timeout=timeout)
+        if not self.is_created(): # In case it was closed during this event loop run
+            return False
+        return True
     
     def go_modal(self, timeout=0):
         if self.figure is None:
@@ -525,14 +550,14 @@ class _realtime_graph():
         self.subplot.lines.remove(line)
         del self._horz_lines_map[id]
     
-    def add_vert_line(self, value, color='black', linestyle='-', id=None, replace=True, redraw=False):
+    def add_vert_line(self, value, color='black', linestyle='-', id=None, replace=True, redraw=False, width=1.0):
         if id in self._vert_lines_map.keys():
             if not replace:
                 return
             self.remove_vert_line(id)
         if self.y_limits is None:
             return
-        line = matplotlib.lines.Line2D(numpy.array([value, value]), numpy.array([self.y_limits[0], self.y_limits[1]]), linestyle=linestyle, color=color)
+        line = matplotlib.lines.Line2D(numpy.array([value, value]), numpy.array([self.y_limits[0], self.y_limits[1]]), linestyle=linestyle, color=color, linewidth=width)
         self._vert_lines += [line]
         if id is not None:
             self._vert_lines_map[id] = line
@@ -640,10 +665,11 @@ class remote_realtime_graph():  #_realtime_graph
             clear_existing_points,
             redraw
         )
-    def add_points(self, points, marker='mo', redraw=False):
+    def add_points(self, points, marker='mo', alpha=1.0, redraw=False):
         self._proxy.add_points(self._id,
             points,
             marker,
+            alpha,
             redraw
         )
     def add_horz_line(self, value, color='red', linestyle='-', id=None, replace=True, redraw=False):
